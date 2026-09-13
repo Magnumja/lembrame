@@ -13,6 +13,8 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceTheme
+import androidx.glance.LocalSize
+import androidx.glance.appwidget.SizeMode
 import androidx.glance.Image
 import androidx.glance.ImageProvider
 import androidx.glance.action.ActionParameters
@@ -71,7 +73,12 @@ class ToggleTaskAction : ActionCallback {
  */
 class LembrameWidget : GlanceAppWidget() {
 
+    /** Recompõe com o tamanho real: o número de linhas depende da altura que o launcher deu. */
+    override val sizeMode: SizeMode = SizeMode.Exact
+
     companion object {
+        private val ORBS = listOf(R.drawable.orb_blue, R.drawable.orb_coral, R.drawable.orb_pink, R.drawable.orb_green)
+
         /** Pede pro launcher fixar o widget (Android 8+); o launcher mostra o diálogo de confirmação. */
         fun requestPin(context: Context) {
             val manager = AppWidgetManager.getInstance(context)
@@ -99,91 +106,117 @@ class LembrameWidget : GlanceAppWidget() {
         }
     }
 
+    /**
+     * Visual do bloco "Roster" do bencho.dev: cartão escuro, uma esfera em
+     * gradiente por linha, nome + legenda, anel de seleção à direita e uma
+     * pílula clara embaixo que é o botão de adicionar.
+     */
     @Composable
     private fun Content(tomorrow: LocalDate, tomorrowTasks: List<Task>, todayTasks: List<Task>) {
-        val bg = ColorProvider(day = Color(0xFFFF6B4A), night = Color(0xFF2A1F2E))
-        val ink = ColorProvider(Color.White)
-        val soft = ColorProvider(Color(0xCCFFFFFF))
-        val date = tomorrow.format(DateTimeFormatter.ofPattern("EEE, d MMM", Locale("pt", "BR")))
+        val card = ColorProvider(day = Color(0xFFFFFFFF), night = Color(0xFF1F1F22))
+        val ink = ColorProvider(day = Color(0xFF1B1720), night = Color(0xFFF2F0EA))
+        val mute = ColorProvider(day = Color(0xFF8A8078), night = Color(0xFF8E8E93))
+        val pill = ColorProvider(day = Color(0xFF1B1720), night = Color(0xFFEDEBE4))
+        val onPill = ColorProvider(day = Color(0xFFF7F1E8), night = Color(0xFF1F1F22))
+
+        val date = tomorrow.format(DateTimeFormatter.ofPattern("EEE, d 'de' MMM", Locale("pt", "BR")))
             .replace(".", "")
+        // cabeçalho (~26dp) + pílula (46dp + 8dp) + margens (28dp) = 108dp; cada linha ocupa 48dp
+        val capacity = ((LocalSize.current.height.value - 108f) / 48f).toInt().coerceIn(1, 8)
+        val rows = (tomorrowTasks.map { it to "Amanhã" } + todayTasks.map { it to "Hoje" }).take(capacity)
+        val left = tomorrowTasks.count { !it.done }
 
         Column(
             GlanceModifier
                 .fillMaxSize()
-                .background(bg)
+                .background(card)
                 .cornerRadius(24.dp)
-                .padding(16.dp)
+                .padding(horizontal = 16.dp, vertical = 14.dp)
                 .clickable(actionStartActivity<MainActivity>()),
         ) {
-            Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(GlanceModifier.defaultWeight()) {
-                    Text("Amanhã", style = TextStyle(color = ink, fontSize = 20.sp, fontWeight = FontWeight.Bold))
-                    Text(date, style = TextStyle(color = soft, fontSize = 12.sp))
-                }
-                Box(
-                    GlanceModifier
-                        .size(36.dp)
-                        .background(ColorProvider(Color(0x33FFFFFF)))
-                        .cornerRadius(18.dp)
-                        .clickable(
-                            actionStartActivity<MainActivity>(
-                                actionParametersOf(
-                                    ActionParameters.Key<String>(MainActivity.EXTRA_ADD_FOR) to tomorrow.toString(),
-                                ),
-                            ),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Image(ImageProvider(R.drawable.ic_add), contentDescription = "Adicionar", modifier = GlanceModifier.size(20.dp))
+            Row(GlanceModifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Amanhã · $date",
+                    style = TextStyle(color = mute, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+                Text(
+                    when {
+                        tomorrowTasks.isEmpty() -> "livre"
+                        left == 0 -> "tudo feito"
+                        else -> "$left por fazer"
+                    },
+                    style = TextStyle(color = mute, fontSize = 12.sp),
+                )
+            }
+
+            if (rows.isEmpty()) {
+                Row(GlanceModifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Image(ImageProvider(R.drawable.orb_blue), null, modifier = GlanceModifier.size(36.dp))
+                    Spacer(GlanceModifier.width(12.dp))
+                    Column {
+                        Text("Nada marcado", style = TextStyle(color = ink, fontSize = 15.sp, fontWeight = FontWeight.Medium))
+                        Text("Toque abaixo pra lembrar", style = TextStyle(color = mute, fontSize = 12.sp))
+                    }
                 }
             }
-            Spacer(GlanceModifier.height(10.dp))
 
-            if (tomorrowTasks.isEmpty()) {
-                Text(
-                    "Nada pra amanhã ainda 🌙\nToque em + pra lembrar.",
-                    style = TextStyle(color = soft, fontSize = 14.sp),
-                )
-            } else {
-                tomorrowTasks.take(6).forEach { task ->
-                    Row(
-                        GlanceModifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp)
-                            .clickable(actionRunCallback<ToggleTaskAction>(actionParametersOf(TaskIdKey to task.id))),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Image(
-                            ImageProvider(if (task.done) R.drawable.ic_box_on else R.drawable.ic_box_off),
-                            contentDescription = null,
-                            modifier = GlanceModifier.size(20.dp),
-                        )
-                        Spacer(GlanceModifier.width(10.dp))
+            rows.forEachIndexed { i, (task, label) ->
+                Row(
+                    GlanceModifier
+                        .fillMaxWidth()
+                        .padding(vertical = 6.dp)
+                        .clickable(actionRunCallback<ToggleTaskAction>(actionParametersOf(TaskIdKey to task.id))),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Image(ImageProvider(ORBS[i % ORBS.size]), null, modifier = GlanceModifier.size(36.dp))
+                    Spacer(GlanceModifier.width(12.dp))
+                    Column(GlanceModifier.defaultWeight()) {
                         Text(
                             task.title,
                             maxLines = 1,
                             style = TextStyle(
-                                color = if (task.done) soft else ink,
+                                color = if (task.done) mute else ink,
                                 fontSize = 15.sp,
-                                fontWeight = if (task.done) FontWeight.Normal else FontWeight.Medium,
+                                fontWeight = FontWeight.Medium,
                                 textDecoration = if (task.done) TextDecoration.LineThrough else TextDecoration.None,
                             ),
                         )
+                        Text(if (task.done) "feito" else label, style = TextStyle(color = mute, fontSize = 12.sp))
                     }
-                }
-                if (tomorrowTasks.size > 6) {
-                    Text("+${tomorrowTasks.size - 6} mais", style = TextStyle(color = soft, fontSize = 12.sp))
+                    Spacer(GlanceModifier.width(8.dp))
+                    Image(
+                        ImageProvider(if (task.done) R.drawable.ic_ring_on else R.drawable.ic_ring_off),
+                        contentDescription = if (task.done) "Feito" else "Pendente",
+                        modifier = GlanceModifier.size(28.dp),
+                    )
                 }
             }
+            if (tomorrowTasks.size + todayTasks.size > rows.size) {
+                Text("+${tomorrowTasks.size + todayTasks.size - rows.size} mais no app", style = TextStyle(color = mute, fontSize = 12.sp))
+            }
 
-            if (todayTasks.isNotEmpty()) {
-                Spacer(GlanceModifier.defaultWeight())
-                val left = todayTasks.count { !it.done }
-                Text(
-                    if (left == 0) "Hoje: tudo feito ✨" else "Hoje: $left de ${todayTasks.size} ainda por fazer",
-                    style = TextStyle(color = soft, fontSize = 12.sp),
-                )
+            Spacer(GlanceModifier.defaultWeight())
+            Spacer(GlanceModifier.height(8.dp))
+            Row(
+                GlanceModifier
+                    .fillMaxWidth()
+                    .height(46.dp)
+                    .background(pill)
+                    .cornerRadius(23.dp)
+                    .clickable(
+                        actionStartActivity<MainActivity>(
+                            actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_ADD_FOR) to tomorrow.toString()),
+                        ),
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Image(ImageProvider(R.drawable.ic_pill_plus), null, modifier = GlanceModifier.size(18.dp))
+                Spacer(GlanceModifier.width(6.dp))
+                Text("Novo lembrete", style = TextStyle(color = onPill, fontSize = 15.sp, fontWeight = FontWeight.Bold))
             }
         }
     }
+
 }
