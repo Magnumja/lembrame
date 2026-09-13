@@ -1,7 +1,6 @@
 package dev.mag.lembrame.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.glance.appwidget.updateAll
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -31,6 +30,8 @@ import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Widgets
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFloatingActionButton
@@ -71,7 +72,9 @@ import dev.mag.lembrame.ui.components.SlideToConfirm
 import dev.mag.lembrame.ui.components.TaskRow
 import dev.mag.lembrame.ui.components.dayLabel
 import dev.mag.lembrame.ui.components.fallWhenDone
-import dev.mag.lembrame.widget.LembrameWidget
+import dev.mag.lembrame.widget.TodayWidget
+import dev.mag.lembrame.widget.TomorrowWidget
+import dev.mag.lembrame.widget.refreshWidgets
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
@@ -98,7 +101,7 @@ fun HomeScreen(addRequest: AddRequest?) {
     val tasks = remember(all, selected) { all.filter { it.date == selected.toString() } }
     val fell = tasks.isNotEmpty() && tasks.all { it.done }
 
-    fun refreshWidget() = scope.launch { LembrameWidget().updateAll(context) }
+    fun refreshWidget() = scope.launch { refreshWidgets(context) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -132,12 +135,25 @@ fun HomeScreen(addRequest: AddRequest?) {
                         fontSize = 14.sp,
                     )
                 }
-                IconButton(onClick = { LembrameWidget.requestPin(context) }) {
-                    Icon(
-                        Icons.Rounded.Widgets,
-                        contentDescription = "Adicionar widget à tela inicial",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                Box {
+                    var menu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { menu = true }) {
+                        Icon(
+                            Icons.Rounded.Widgets,
+                            contentDescription = "Adicionar widget à tela inicial",
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Widget de hoje") },
+                            onClick = { menu = false; TodayWidget().requestPin(context) },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Widget de amanhã") },
+                            onClick = { menu = false; TomorrowWidget().requestPin(context) },
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(18.dp))

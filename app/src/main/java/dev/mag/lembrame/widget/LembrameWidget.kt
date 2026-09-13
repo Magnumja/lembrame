@@ -27,6 +27,7 @@ import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
+import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -53,8 +54,24 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-class LembrameWidgetReceiver : GlanceAppWidgetReceiver() {
-    override val glanceAppWidget: GlanceAppWidget = LembrameWidget()
+class TodayWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = TodayWidget()
+}
+
+class TomorrowWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = TomorrowWidget()
+}
+
+/** Widget de hoje: esferas começam no coral (quente). */
+class TodayWidget : LembrameWidget(dayOffset = 0, label = "Hoje", receiver = TodayWidgetReceiver::class.java, orbStart = 1)
+
+/** Widget de amanhã: esferas começam no azul (frio). */
+class TomorrowWidget : LembrameWidget(dayOffset = 1, label = "Amanhã", receiver = TomorrowWidgetReceiver::class.java, orbStart = 0)
+
+/** Atualiza os dois widgets — chamado sempre que uma tarefa muda. */
+suspend fun refreshWidgets(context: Context) {
+    TodayWidget().updateAll(context)
+    TomorrowWidget().updateAll(context)
 }
 
 private val TaskIdKey = ActionParameters.Key<String>("taskId")
@@ -63,28 +80,32 @@ class ToggleTaskAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val id = parameters[TaskIdKey] ?: return
         TaskRepository.toggle(context, id)
-        LembrameWidget().update(context, glanceId)
+        refreshWidgets(context)
     }
 }
 
 /**
- * Widget "Amanhã": as tarefas do próximo dia, com checkbox que funciona direto
- * na tela inicial. Embaixo, um resumo do que ainda falta hoje.
+ * Um dia por widget (hoje ou amanhã), com checkbox que funciona direto na
+ * tela inicial e uma pílula pra adicionar já naquele dia.
  */
-class LembrameWidget : GlanceAppWidget() {
+abstract class LembrameWidget(
+    private val dayOffset: Long,
+    private val label: String,
+    private val receiver: Class<out GlanceAppWidgetReceiver>,
+    private val orbStart: Int,
+) : GlanceAppWidget() {
 
     /** Recompõe com o tamanho real: o número de linhas depende da altura que o launcher deu. */
     override val sizeMode: SizeMode = SizeMode.Exact
 
-    companion object {
-        private val ORBS = listOf(R.drawable.orb_blue, R.drawable.orb_coral, R.drawable.orb_pink, R.drawable.orb_green)
+    /** Pede pro launcher fixar este widget (Android 8+); o launcher mostra o diálogo de confirmação. */
+    fun requestPin(context: Context) {
+        val manager = AppWidgetManager.getInstance(context)
+        if (manager.isRequestPinAppWidgetSupported) manager.requestPinAppWidget(ComponentName(context, receiver), null, null)
+    }
 
-        /** Pede pro launcher fixar o widget (Android 8+); o launcher mostra o diálogo de confirmação. */
-        fun requestPin(context: Context) {
-            val manager = AppWidgetManager.getInstance(context)
-            val provider = ComponentName(context, LembrameWidgetReceiver::class.java)
-            if (manager.isRequestPinAppWidgetSupported) manager.requestPinAppWidget(provider, null, null)
-        }
+    private companion object {
+        val ORBS = listOf(R.drawable.orb_blue, R.drawable.orb_coral, R.drawable.orb_pink, R.drawable.orb_green)
     }
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
@@ -94,15 +115,8 @@ class LembrameWidget : GlanceAppWidget() {
         // recompõe, então dados carregados antes do provideContent ficariam velhos.
         provideContent {
             val all by TaskRepository.tasks(context).collectAsState(emptyList())
-            val today = LocalDate.now()
-            val tomorrow = today.plusDays(1)
-            GlanceTheme {
-                Content(
-                    tomorrow = tomorrow,
-                    tomorrowTasks = all.filter { it.date == tomorrow.toString() },
-                    todayTasks = all.filter { it.date == today.toString() },
-                )
-            }
+            val day = LocalDate.now().plusDays(dayOffset)
+            GlanceTheme { Content(day, all.filter { it.date == day.toString() }) }
         }
     }
 
@@ -112,19 +126,19 @@ class LembrameWidget : GlanceAppWidget() {
      * pílula clara embaixo que é o botão de adicionar.
      */
     @Composable
-    private fun Content(tomorrow: LocalDate, tomorrowTasks: List<Task>, todayTasks: List<Task>) {
+    private fun Content(day: LocalDate, tasks: List<Task>) {
         val card = ColorProvider(day = Color(0xFFFFFFFF), night = Color(0xFF1F1F22))
         val ink = ColorProvider(day = Color(0xFF1B1720), night = Color(0xFFF2F0EA))
         val mute = ColorProvider(day = Color(0xFF8A8078), night = Color(0xFF8E8E93))
         val pill = ColorProvider(day = Color(0xFF1B1720), night = Color(0xFFEDEBE4))
         val onPill = ColorProvider(day = Color(0xFFF7F1E8), night = Color(0xFF1F1F22))
 
-        val date = tomorrow.format(DateTimeFormatter.ofPattern("EEE, d 'de' MMM", Locale("pt", "BR")))
+        val date = day.format(DateTimeFormatter.ofPattern("EEE, d 'de' MMM", Locale("pt", "BR")))
             .replace(".", "")
         // cabeçalho (~26dp) + pílula (46dp + 8dp) + margens (28dp) = 108dp; cada linha ocupa 48dp
         val capacity = ((LocalSize.current.height.value - 108f) / 48f).toInt().coerceIn(1, 8)
-        val rows = (tomorrowTasks.map { it to "Amanhã" } + todayTasks.map { it to "Hoje" }).take(capacity)
-        val left = tomorrowTasks.count { !it.done }
+        val rows = tasks.take(capacity)
+        val left = tasks.count { !it.done }
 
         Column(
             GlanceModifier
@@ -136,13 +150,13 @@ class LembrameWidget : GlanceAppWidget() {
         ) {
             Row(GlanceModifier.fillMaxWidth().padding(bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    "Amanhã · $date",
+                    "$label · $date",
                     style = TextStyle(color = mute, fontSize = 12.sp, fontWeight = FontWeight.Medium),
                     modifier = GlanceModifier.defaultWeight(),
                 )
                 Text(
                     when {
-                        tomorrowTasks.isEmpty() -> "livre"
+                        tasks.isEmpty() -> "livre"
                         left == 0 -> "tudo feito"
                         else -> "$left por fazer"
                     },
@@ -161,7 +175,7 @@ class LembrameWidget : GlanceAppWidget() {
                 }
             }
 
-            rows.forEachIndexed { i, (task, label) ->
+            rows.forEachIndexed { i, task ->
                 Row(
                     GlanceModifier
                         .fillMaxWidth()
@@ -169,7 +183,7 @@ class LembrameWidget : GlanceAppWidget() {
                         .clickable(actionRunCallback<ToggleTaskAction>(actionParametersOf(TaskIdKey to task.id))),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Image(ImageProvider(ORBS[i % ORBS.size]), null, modifier = GlanceModifier.size(36.dp))
+                    Image(ImageProvider(ORBS[(i + orbStart) % ORBS.size]), null, modifier = GlanceModifier.size(36.dp))
                     Spacer(GlanceModifier.width(12.dp))
                     Column(GlanceModifier.defaultWeight()) {
                         Text(
@@ -182,7 +196,7 @@ class LembrameWidget : GlanceAppWidget() {
                                 textDecoration = if (task.done) TextDecoration.LineThrough else TextDecoration.None,
                             ),
                         )
-                        Text(if (task.done) "feito" else label, style = TextStyle(color = mute, fontSize = 12.sp))
+                        Text(if (task.done) "feito" else "pendente", style = TextStyle(color = mute, fontSize = 12.sp))
                     }
                     Spacer(GlanceModifier.width(8.dp))
                     Image(
@@ -192,8 +206,8 @@ class LembrameWidget : GlanceAppWidget() {
                     )
                 }
             }
-            if (tomorrowTasks.size + todayTasks.size > rows.size) {
-                Text("+${tomorrowTasks.size + todayTasks.size - rows.size} mais no app", style = TextStyle(color = mute, fontSize = 12.sp))
+            if (tasks.size > rows.size) {
+                Text("+${tasks.size - rows.size} mais no app", style = TextStyle(color = mute, fontSize = 12.sp))
             }
 
             Spacer(GlanceModifier.defaultWeight())
@@ -206,7 +220,7 @@ class LembrameWidget : GlanceAppWidget() {
                     .cornerRadius(23.dp)
                     .clickable(
                         actionStartActivity<MainActivity>(
-                            actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_ADD_FOR) to tomorrow.toString()),
+                            actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_ADD_FOR) to day.toString()),
                         ),
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,

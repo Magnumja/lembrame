@@ -4,7 +4,7 @@ Widget de tarefas do **próximo dia** para Android. Nada de semana inteira,
 nada de projeto: só o que você não pode esquecer amanhã (ou nos próximos dias).
 
 - 7 dias no máximo (hoje + 6). Tarefa com mais de uma semana some sozinha.
-- Widget na tela inicial com as tarefas de amanhã e checkbox que funciona ali mesmo.
+- Dois widgets (Hoje e Amanhã) com checkbox que funciona ali mesmo e botão de novo lembrete.
 - Animações inspiradas nos blocos do [bencho.dev](https://bencho.dev):
   checklist com uma mola por linha, seletor com indicador em duas fases,
   sino com oscilação amortecida e slide-to-confirm pra limpar o dia.

@@ -1,5 +1,7 @@
 <resources>
     <string name="app_name">Lembra-me</string>
-    <string name="widget_label">Lembra-me · Amanhã</string>
-    <string name="widget_description">Suas tarefas de amanhã, na tela inicial.</string>
+    <string name="widget_today">Lembra-me · Hoje</string>
+    <string name="widget_tomorrow">Lembra-me · Amanhã</string>
+    <string name="widget_today_description">Suas tarefas de hoje, na tela inicial.</string>
+    <string name="widget_tomorrow_description">Suas tarefas de amanhã, na tela inicial.</string>
 </resources>

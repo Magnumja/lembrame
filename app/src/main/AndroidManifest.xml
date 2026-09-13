@@ -21,15 +21,27 @@
         </activity>
 
         <receiver
-            android:name=".widget.LembrameWidgetReceiver"
+            android:name=".widget.TomorrowWidgetReceiver"
             android:exported="true"
-            android:label="@string/widget_label">
+            android:label="@string/widget_tomorrow">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/lembrame_widget_info" />
+                android:resource="@xml/widget_tomorrow_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.TodayWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_today">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_today_info" />
         </receiver>
     </application>
 </manifest>
