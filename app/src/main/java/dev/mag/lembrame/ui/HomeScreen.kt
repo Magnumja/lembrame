@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -61,6 +60,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.mag.lembrame.AddRequest
 import dev.mag.lembrame.data.Task
@@ -85,11 +86,21 @@ import java.util.Locale
 fun HomeScreen(addRequest: AddRequest?) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val today = remember { LocalDate.now() }
+    var today by remember { mutableStateOf(LocalDate.now()) }
     val days = remember(today) { (0 until TaskRepository.HORIZON_DAYS).map { today.plusDays(it.toLong()) } }
 
     // O app é sobre o próximo dia, então ele abre em "Amanhã".
     var selected by remember { mutableStateOf(today.plusDays(1)) }
+
+    // Virou o dia com o app em memória? Recalcula "hoje" e, se o dia
+    // selecionado ficou no passado, volta pra amanhã.
+    LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
+        val now = LocalDate.now()
+        if (now != today) {
+            today = now
+            if (selected.isBefore(now)) selected = now.plusDays(1)
+        }
+    }
     var showAdd by remember { mutableStateOf(false) }
     LaunchedEffect(addRequest) {
         if (addRequest != null) { selected = addRequest.day; showAdd = true }
@@ -119,7 +130,6 @@ fun HomeScreen(addRequest: AddRequest?) {
             Modifier
                 .fillMaxSize()
                 .padding(inner)
-                .statusBarsPadding()
                 .padding(horizontal = 20.dp),
         ) {
             Spacer(Modifier.height(12.dp))

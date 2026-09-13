@@ -70,7 +70,6 @@ fun DayPicker(
         val slotPx = with(LocalDensity.current) { slot.toPx() }
         val left = remember { Animatable(index * slotPx) }
         val right = remember { Animatable((index + 1) * slotPx) }
-        val scope = androidx.compose.runtime.rememberCoroutineScope()
 
         LaunchedEffect(index, slotPx) {
             val targetL = index * slotPx
@@ -105,7 +104,7 @@ fun DayPicker(
                         .clickable(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null,
-                        ) { scope.launch { onSelect(day) } },
+                        ) { onSelect(day) },
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
                 ) {

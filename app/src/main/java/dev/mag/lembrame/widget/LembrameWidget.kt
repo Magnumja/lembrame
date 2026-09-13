@@ -22,12 +22,15 @@ import androidx.glance.action.actionParametersOf
 import androidx.glance.action.actionStartActivity
 import androidx.glance.action.clickable
 import androidx.glance.appwidget.GlanceAppWidget
+import androidx.glance.appwidget.GlanceAppWidgetManager
 import androidx.glance.appwidget.GlanceAppWidgetReceiver
+import androidx.glance.appwidget.state.updateAppWidgetState
+import androidx.glance.currentState
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.glance.appwidget.action.ActionCallback
 import androidx.glance.appwidget.action.actionRunCallback
 import androidx.glance.appwidget.cornerRadius
 import androidx.glance.appwidget.provideContent
-import androidx.glance.appwidget.updateAll
 import androidx.glance.background
 import androidx.glance.layout.Alignment
 import androidx.glance.layout.Box
@@ -68,10 +71,19 @@ class TodayWidget : LembrameWidget(dayOffset = 0, label = "Hoje", receiver = Tod
 /** Widget de amanhã: esferas começam no azul (frio). */
 class TomorrowWidget : LembrameWidget(dayOffset = 1, label = "Amanhã", receiver = TomorrowWidgetReceiver::class.java, orbStart = 0)
 
-/** Atualiza os dois widgets — chamado sempre que uma tarefa muda. */
+/** A data de referência vive no estado do Glance: mudar o valor força recomposição (o Compose ignora `now()` puro). */
+private val DateKey = stringPreferencesKey("date")
+
+/** Atualiza os dois widgets — chamado sempre que uma tarefa muda ou vira o dia. */
 suspend fun refreshWidgets(context: Context) {
-    TodayWidget().updateAll(context)
-    TomorrowWidget().updateAll(context)
+    val today = LocalDate.now().toString()
+    val manager = GlanceAppWidgetManager(context)
+    for (widget in listOf(TodayWidget(), TomorrowWidget())) {
+        for (id in manager.getGlanceIds(widget.javaClass)) {
+            updateAppWidgetState(context, id) { it[DateKey] = today }
+            widget.update(context, id)
+        }
+    }
 }
 
 private val TaskIdKey = ActionParameters.Key<String>("taskId")
@@ -110,12 +122,14 @@ abstract class LembrameWidget(
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         TaskRepository.purge(context) // toda atualização periódica limpa o que passou de uma semana
+        MidnightRefresh.schedule(context)
 
         // O Flow é coletado DENTRO do conteúdo: o Glance mantém a sessão viva e só
         // recompõe, então dados carregados antes do provideContent ficariam velhos.
         provideContent {
             val all by TaskRepository.tasks(context).collectAsState(emptyList())
-            val day = LocalDate.now().plusDays(dayOffset)
+            val base = currentState(DateKey)?.let { LocalDate.parse(it) } ?: LocalDate.now()
+            val day = base.plusDays(dayOffset)
             GlanceTheme { Content(day, all.filter { it.date == day.toString() }) }
         }
     }
