@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Lembra-me</string>
+    <string name="widget_label">Lembra-me · Amanhã</string>
+    <string name="widget_description">Suas tarefas de amanhã, na tela inicial.</string>
+</resources>
